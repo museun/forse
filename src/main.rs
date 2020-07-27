@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use std::{cell::RefCell, collections::HashMap};
 
 type Func = Box<dyn Fn(&Forth) + 'static>;
+type Cell = i32;
 
 #[derive(Default)]
 struct Word {
@@ -32,7 +33,7 @@ impl Word {
 #[derive(Default)]
 struct Forth {
     // RefCells because of a recursive borrow and passing self to a boxed closure..
-    stack: RefCell<Vec<usize>>,
+    stack: RefCell<Vec<Cell>>,
     words: RefCell<HashMap<String, Word>>,
 }
 
@@ -65,7 +66,7 @@ impl Forth {
         let (mut name, mut body) = <(String, String)>::default();
         let mut creating = false;
 
-        for word in code.split_terminator(' ') {
+        for word in code.trim().split_terminator(' ') {
             match word {
                 ":" => creating = true,
                 ";" => {
@@ -88,15 +89,15 @@ impl Forth {
         self.words.borrow_mut().insert(word.name.clone(), word);
     }
 
-    fn push(&self, cell: usize) {
+    fn push(&self, cell: Cell) {
         self.stack.borrow_mut().push(cell)
     }
 
-    fn pop(&self) -> usize {
+    fn pop(&self) -> Cell {
         self.stack.borrow_mut().pop().unwrap()
     }
 
-    fn top(&self) -> usize {
+    fn top(&self) -> Cell {
         self.stack.borrow().last().cloned().unwrap()
     }
 }
@@ -105,12 +106,10 @@ fn main() -> anyhow::Result<()> {
     let forth = Forth::default();
 
     forth.add_word(Word::new(".").func(|f| println!("{}", f.top())));
+    forth.add_word(Word::new("+").func(|f| f.push(f.pop() + f.pop())));
+    forth.add_word(Word::new("-").func(|f| f.push(f.pop() - f.pop())));
 
-    forth.add_word(Word::new("+").func(|f| {
-        let res = f.pop() + f.pop();
-        f.push(res)
-    }));
-
+    forth.add_word(Word::new("dup").func(|f| f.push(f.top())));
     forth.add_word(Word::new("add").body("+"));
 
     forth.exec("1 1 + .")?;
@@ -121,6 +120,9 @@ fn main() -> anyhow::Result<()> {
 
     forth.exec(": foo ;")?;
     forth.exec("foo").unwrap_err();
+
+    forth.exec("2 dup + .")?;
+    forth.exec("1 - .")?;
 
     Ok(())
 }
